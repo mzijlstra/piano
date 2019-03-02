@@ -85,37 +85,30 @@ int main() {
 
     SDL_PauseAudioDevice(dev, 0); /* start audio playing. */
 
-    // setup main loop
-    int fps = 60;
-    int frametime = 1000 / fps; 
-    int starttime, exectime;
-    while (1) {
-        starttime = SDL_GetTicks();
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            switch(event.type) {
-                case SDL_QUIT:
+    // setup event driven main loop
+    SDL_Event event;
+    int k = 0;
+    while (SDL_WaitEvent(&event)) {
+        switch(event.type) {
+            case SDL_QUIT:
+                goto done;
+                break;
+            case SDL_KEYDOWN:
+                k = event.key.keysym.sym;
+                if (k == SDLK_ESCAPE || k == SDLK_q) {
                     goto done;
-                    break;
-                case SDL_KEYDOWN:
-                    if (event.key.keysym.sym == SDLK_ESCAPE) {
-                        goto done;
-                    } else if (event.key.keysym.sym == SDLK_SPACE) {
-                        on = 1;
-                    }
-                    break;
-                case SDL_KEYUP:
-                    if (event.key.keysym.sym == SDLK_SPACE) {
-                        on = 0;
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-        exectime = SDL_GetTicks() - starttime;
-        if (exectime < frametime) {
-            SDL_Delay(frametime - exectime);
+                } else if (k == SDLK_SPACE) {
+                    on = 1;
+                }
+                break;
+            case SDL_KEYUP:
+                k = event.key.keysym.sym;
+                if (k == SDLK_SPACE) {
+                    on = 0;
+                }
+                break;
+            default:
+                break;
         }
     }
 
