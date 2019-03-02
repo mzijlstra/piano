@@ -1,41 +1,80 @@
+#include <stdbool.h>
 #include <SDL2/SDL.h>
 
-#define FREQ 44100.0
+typedef struct Key {
+    bool on;
+    double freq;
+    double wave_part;
+} Key;
 
-static double wave_part = 0;
 static SDL_AudioSpec have;
 
+void setupKeys(Key* keys) {
+    // make sure the values in keys start at zero;
+    SDL_memset(keys, 0, sizeof(Key) * 256);
+
+    keys['a'].freq = 432.0;
+    keys['s'].freq = 484.9; 
+    keys['d'].freq = 513.74;
+    keys['f'].freq = 576.65;
+    keys['g'].freq = 647.27;
+    keys['h'].freq = 685.76;
+    keys['j'].freq = 769.74;
+    keys['k'].freq = 864.00;
+    keys['l'].freq = 969.81;
+    keys[';'].freq = 1027.47;
+    keys['\''].freq = 1153.3;
+
+}
+
 void AudioCallback(void *userdata, Uint8 *stream, int len){
-    extern SDL_AudioSpec have;
-    // first create silence in the stream
+    extern SDL_AudioSpec have; // only works if we actually have Uint8
+    Key *keys = (Key*)userdata;
+
+    // first ensure silence in the stream
     SDL_memset(stream, have.silence, len);
-    int *keypressed = (int*)userdata;
 
-    if (*keypressed) {
-        // create a buffer for our generated audio
-        Uint8* audio = SDL_malloc(sizeof(Uint8) * len);
+    // create an audio stream to contain all pressed keys in one
+    Uint32 *audio = SDL_malloc(sizeof(Uint32) * len);
+    SDL_memset(audio, 0, sizeof(Uint32) * len);
 
-        // generate our audio wave
-        double tone = FREQ / 432.0;
-        double half = tone / 2;
-        double part = 0;
-        for ( int i = 0; i < len; i++ ) {
-            part = fmod(wave_part + i, tone);
-            if ( part < half ) {
-                audio[i] = 0;
-            } else {
-                audio[i] = 255;
+    // find which keys are pressed and mix in their frequencies
+    int pressed = 0;
+    for (int k = 0; k < 255; k++) {
+        if (keys[k].on && keys[k].freq) {
+            pressed += 1;
+
+            // generate square wave into audio
+            double tone = have.freq / keys[k].freq;
+            double half = tone / 2;
+            double part = 0;
+            for ( int i = 0; i < len; i++ ) {
+                part = fmod(keys[k].wave_part + i, tone);
+                if ( part < half ) {
+                    audio[i] += 0;
+                } else {
+                    audio[i] += 255;
+                }
             }
+            // store where we are in the wave, so that we can continue there
+            // when generating the next sample
+            keys[k].wave_part = part;
         }
-        wave_part = part;
-
-        // mix the wave into the stream
-        SDL_MixAudioFormat(stream, audio, have.format, len, SDL_MIX_MAXVOLUME);
-        SDL_free(audio);
     }
+
+    // normalize our audio into the stream
+    if (pressed) {
+        for (int i = 0; i < len; i++) {
+            stream[i] = audio[i] / pressed;
+        }
+    }
+    SDL_free(audio);
 }
 
 int main() {
+    // create our keys data structure
+    Key keys[256];
+    setupKeys(keys);
 
     // No keyboard events unless we have video initialized
     if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
@@ -61,18 +100,17 @@ int main() {
     }
 
     // setup audio
-    int on = 0;
     SDL_AudioSpec want;
     SDL_AudioDeviceID dev;
 
     SDL_memset(&want, 0, sizeof(want));
-    want.freq = FREQ;
+    want.freq = 44100;
     want.format = AUDIO_U8;
     want.channels = 1;
     want.samples = 1024;
     want.callback = AudioCallback;
-    want.userdata = &on;
-    dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_ANY_CHANGE);
+    want.userdata = keys;
+    dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
 
     if (dev == 0) {
         SDL_Log("Failed to open audio: %s", SDL_GetError());
@@ -95,16 +133,16 @@ int main() {
                 break;
             case SDL_KEYDOWN:
                 key = event.key.keysym.sym;
-                if (key == SDLK_ESCAPE || key == SDLK_q) {
+                if (key == SDLK_ESCAPE) {
                     goto done;
-                } else if (key == SDLK_SPACE) {
-                    on = 1;
+                } else if (key >= 0 && key <= 127) {
+                    keys[key].on = true;
                 }
                 break;
             case SDL_KEYUP:
                 key = event.key.keysym.sym;
-                if (key == SDLK_SPACE) {
-                    on = 0;
+                if (key >= 0 && key <= 127) {
+                    keys[key].on = false;
                 }
                 break;
             default:
