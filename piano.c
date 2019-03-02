@@ -87,23 +87,23 @@ int main() {
 
     // setup event driven main loop
     SDL_Event event;
-    int k = 0;
     while (SDL_WaitEvent(&event)) {
+        int key = 0;
         switch(event.type) {
             case SDL_QUIT:
                 goto done;
                 break;
             case SDL_KEYDOWN:
-                k = event.key.keysym.sym;
-                if (k == SDLK_ESCAPE || k == SDLK_q) {
+                key = event.key.keysym.sym;
+                if (key == SDLK_ESCAPE || key == SDLK_q) {
                     goto done;
-                } else if (k == SDLK_SPACE) {
+                } else if (key == SDLK_SPACE) {
                     on = 1;
                 }
                 break;
             case SDL_KEYUP:
-                k = event.key.keysym.sym;
-                if (k == SDLK_SPACE) {
+                key = event.key.keysym.sym;
+                if (key == SDLK_SPACE) {
                     on = 0;
                 }
                 break;
