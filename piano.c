@@ -287,6 +287,8 @@ int main() {
 
 done: // cleanup
     SDL_CloseAudioDevice(dev);
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
 
     return 0;
