@@ -121,8 +121,8 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
             } else if (wave == sine) {
                 double sine_tone = tone / (2 * M_PI);
                 for (int i = 0; i < len; i++) {
-                    part = sin((keys[k].wave_part + i) / sine_tone );
-                    audio[i] = (Sint32) (part * volume);
+                    part = fmod(keys[k].wave_part + i, tone);
+                    audio[i] = sin(part / sine_tone) * volume;
                 }
             } else if (wave == saw) {
                 double qtone = tone * 0.35;
@@ -164,7 +164,6 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
 
 int main() {
     extern WaveForm wave;
-    printf("%d\n", wave);
     // create our keys data structure
     Key keys[256];
     setupKeys(keys);
@@ -234,7 +233,7 @@ int main() {
     SDL_Event event;
     while (SDL_WaitEvent(&event)) {
         int key = 0;
-        int mods;
+        int mods = 0;
         switch(event.type) {
             case SDL_QUIT:
                 goto done;
