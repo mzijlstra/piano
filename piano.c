@@ -1,7 +1,13 @@
-#include <unistd.h>
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+
+typedef enum WaveForm {
+    square,
+    sine,
+    saw,
+    noise,
+} WaveForm;
 
 typedef struct Key {
     bool on;
@@ -10,6 +16,8 @@ typedef struct Key {
 } Key;
 
 static SDL_AudioSpec have;
+static WaveForm wave = sine;
+static Sint8 volume = 10;
 
 void setupKeys(Key* keys) {
     // make sure the values in keys start at zero;
@@ -80,15 +88,17 @@ void setupKeys(Key* keys) {
 }
 
 void AudioCallback(void *userdata, Uint8 *stream, int len){
-    extern SDL_AudioSpec have; // only works if we actually have Uint8
+    extern WaveForm wave;
+    extern SDL_AudioSpec have; // only works if we actually have Sint8
+    extern Sint8 volume;
     Key *keys = (Key*)userdata;
 
     // first ensure silence in the stream
     SDL_memset(stream, have.silence, len);
 
     // create an audio stream to contain all pressed keys in one
-    Uint32 *audio = SDL_malloc(sizeof(Uint32) * len);
-    SDL_memset(audio, 0, sizeof(Uint32) * len);
+    Sint32 *audio = SDL_malloc(sizeof(Sint32) * len);
+    SDL_memset(audio, 0, sizeof(Sint32) * len);
 
     // find which keys are pressed and mix in their frequencies
     int pressed = 0;
@@ -96,16 +106,39 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
         if (keys[k].on && keys[k].freq) {
             pressed += 1;
 
-            // generate square wave into audio
             double tone = have.freq / keys[k].freq;
-            double half = tone / 2;
             double part = 0;
-            for ( int i = 0; i < len; i++ ) {
-                part = fmod(keys[k].wave_part + i, tone);
-                if ( part < half ) {
-                    audio[i] += 0;
-                } else {
-                    audio[i] += 255;
+            if (wave == square) {
+                double half = tone / 2;
+                for ( int i = 0; i < len; i++ ) {
+                    part = fmod(keys[k].wave_part + i, tone);
+                    if ( part < half ) {
+                        audio[i] -= volume;
+                    } else {
+                        audio[i] += volume;
+                    }
+                }
+            } else if (wave == sine) {
+                double sine_tone = tone / (2 * M_PI);
+                for (int i = 0; i < len; i++) {
+                    part = sin((keys[k].wave_part + i) / sine_tone );
+                    audio[i] = (Sint32) (part * volume);
+                }
+            } else if (wave == saw) {
+                double qtone = tone * 0.35;
+                double htone = tone * 0.5;
+                double ttone = tone * 0.75;
+                for (int i = 0; i < len; i++) {
+                    part = fmod(keys[k].wave_part + i, tone);
+                    if (part <= qtone) {
+                        audio[i] = (part / qtone) * volume;
+                    } else if (part <= htone) {
+                        audio[i] = (1 - (part - qtone) / qtone) * volume; 
+                    } else if (part <= ttone) {
+                        audio[i] = (0 - (part - htone) / qtone) * volume;
+                    } else { // the last quarter of the 'wave'
+                        audio[i] = (-1 + (part - ttone) / qtone) * volume;
+                    }
                 }
             }
             // store where we are in the wave, so that we can continue there
@@ -117,25 +150,34 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
     // normalize our audio into the stream
     if (pressed) {
         for (int i = 0; i < len; i++) {
-            stream[i] = audio[i] / pressed;
+            int val = audio[i] / pressed;
+            if (val > 127) {
+                val = 127;
+            } else if (val < -128) {
+                val = -128;
+            }
+            stream[i] = val;
         }
     }
     SDL_free(audio);
 }
 
 int main() {
+    extern WaveForm wave;
+    printf("%d\n", wave);
     // create our keys data structure
     Key keys[256];
     setupKeys(keys);
 
-    // No keyboard events unless we have video initialized
+    // we cannot make this a console only application because there are 
+    // no keyboard events unless we have video initialized
     if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
         printf("Could not init SDL: %s\n", SDL_GetError());
         return 1;
     }
     atexit(SDL_Quit);
 
-    // Create an application window with the following settings:
+    // Create an application window showing a piano image
     SDL_Window *window;
     SDL_Renderer *renderer;
         
@@ -170,7 +212,7 @@ int main() {
 
     SDL_memset(&want, 0, sizeof(want));
     want.freq = 44100;
-    want.format = AUDIO_U8;
+    want.format = AUDIO_S8;
     want.channels = 1;
     want.samples = 1024;
     want.callback = AudioCallback;
@@ -204,6 +246,22 @@ int main() {
                 key = event.key.keysym.sym;
                 if (key == SDLK_ESCAPE) {
                     goto done;
+                } else if (key == SDLK_F1) {
+                    wave = square;
+                } else if (key == SDLK_F2) {
+                    wave = sine;
+                } else if (key == SDLK_F3) {
+                    wave = saw;
+                } else if (key == SDLK_MINUS) {
+                    volume -= 1;
+                    if (volume < 1) {
+                        volume = 1;
+                    }
+                } else if (key == SDLK_EQUALS) {
+                    volume += 1;
+                    if (volume < 0) {
+                        volume = 127;
+                    }
                 } else if (key >= 0 && key <= 127) {
                     mods = SDL_GetModState();
                     if (mods & KMOD_SHIFT) {
