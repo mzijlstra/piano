@@ -144,7 +144,9 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
                     audio[i] = -1 + part/tone*2 * volume;
                 }
             } else if (wave == noise) {
-                // TODO
+                for (int i = 0; i < len; i++) {
+                    audio[i] = ((random() % 20) - 10) * volume; 
+                }
             } else if (wave == sine) {
                 double sine_tone = tone / (2 * M_PI);
                 for (int i = 0; i < len; i++) {
