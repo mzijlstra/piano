@@ -4,9 +4,13 @@
 
 typedef enum WaveForm {
     square,
-    sine,
+    triangle,
     saw,
     noise,
+    sine,
+    opl2_1,
+    opl2_2,
+    opl2_3 
 } WaveForm;
 
 typedef struct Key {
@@ -118,13 +122,7 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
                         audio[i] += volume;
                     }
                 }
-            } else if (wave == sine) {
-                double sine_tone = tone / (2 * M_PI);
-                for (int i = 0; i < len; i++) {
-                    part = fmod(keys[k].wave_part + i, tone);
-                    audio[i] = sin(part / sine_tone) * volume;
-                }
-            } else if (wave == saw) {
+            } else if (wave == triangle) {
                 double qtone = tone * 0.35;
                 double htone = tone * 0.5;
                 double ttone = tone * 0.75;
@@ -140,7 +138,60 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
                         audio[i] = (-1 + (part - ttone) / qtone) * volume;
                     }
                 }
+            } else if (wave == saw) {
+                for (int i = 0; i < len; i++) {
+                    part = fmod(keys[k].wave_part + i, tone);
+                    audio[i] = -1 + part/tone*2 * volume;
+                }
+            } else if (wave == noise) {
+                // TODO
+            } else if (wave == sine) {
+                double sine_tone = tone / (2 * M_PI);
+                for (int i = 0; i < len; i++) {
+                    part = fmod(keys[k].wave_part + i, tone);
+                    audio[i] = sin(part / sine_tone) * volume;
+                }
+            } else if (wave == opl2_1) {
+                double sine_tone = tone / (2 * M_PI);
+                double htone = tone * 0.5;
+                for (int i = 0; i < len; i++) {
+                    part = fmod(keys[k].wave_part + i, tone);
+                    if (part <= htone) {
+                        audio[i] = sin(part / sine_tone) * volume;
+                    } else {
+                        audio[i] = 0;
+                    }
+                }
+            } else if (wave == opl2_2) {
+                double sine_tone = tone / (2 * M_PI);
+                double htone = tone * 0.5;
+                for (int i = 0; i < len; i++) {
+                    part = fmod(keys[k].wave_part + i, tone);
+                    if (part <= htone) {
+                        audio[i] = sin(part / sine_tone) * volume;
+                    } else {
+                        audio[i] = -sin(part / sine_tone) * volume;
+                    }
+                }
+            } else if (wave == opl2_3) {
+                double sine_tone = tone / (2 * M_PI);
+                double qtone = tone * 0.35;
+                double htone = tone * 0.5;
+                double ttone = tone * 0.75;
+                for (int i = 0; i < len; i++) {
+                    part = fmod(keys[k].wave_part + i, tone);
+                    if (part <= qtone) {
+                        audio[i] = sin(part / sine_tone) * volume;
+                    } else if (part <= htone) {
+                        audio[i] = 0;
+                    } else if (part <= ttone) {
+                        audio[i] = -sin(part / sine_tone) * volume;
+                    } else { // the last quarter of the 'wave'
+                        audio[i] = 0;
+                    }
+                }
             }
+
             // store where we are in the wave, so that we can continue there
             // when generating the next sample
             keys[k].wave_part = part;
@@ -248,9 +299,19 @@ int main() {
                 } else if (key == SDLK_F1) {
                     wave = square;
                 } else if (key == SDLK_F2) {
-                    wave = sine;
+                    wave = triangle;
                 } else if (key == SDLK_F3) {
                     wave = saw;
+                } else if (key == SDLK_F4) {
+                    wave = noise;
+                } else if (key == SDLK_F5) {
+                    wave = sine;
+                } else if (key == SDLK_F6) {
+                    wave = opl2_1;
+                } else if (key == SDLK_F7) {
+                    wave = opl2_2;
+                } else if (key == SDLK_F8) {
+                    wave = opl2_3;
                 } else if (key == SDLK_MINUS) {
                     volume -= 1;
                     if (volume < 1) {
