@@ -17,7 +17,7 @@ typedef struct Key {
     char tone[4];   // name of tone, eg A4
     double freq;    // frequency of tone, eg 440hz
     char key;       // keyboard scan code
-    SDL_Rect rect;  // rectangle on screen
+    SDL_Rect *rect; // rectangle on screen
     bool on;        // currently playing
     double wave_part;// place to store wave position between frames
 } Key;
@@ -36,11 +36,8 @@ static WaveForm wave = square;
 static Sint8 volume = 10;
 static double A4 = 432;
 
-/* initializes arrays of black and white struct Key, starting from the key
- * indicated by s_key in s_octave, ending on e_key in e_octave
- *   alwas start and end with a white key
+/* Helper to connect a keyboard key to a certain tone
  */
-
 bool keyToTone(Key* keys, int len, char *s, char c) {
     for (int i = 0; i < len; i++) {
         if (strncmp(keys[i].tone, s, 3) == 0) {
@@ -51,6 +48,10 @@ bool keyToTone(Key* keys, int len, char *s, char c) {
     return false;
 }
 
+/* initializes arrays of black and white struct Key, starting from the key
+ * indicated by s_key in s_octave, ending on e_key in e_octave
+ *   alwas start and end with a white key 
+ */
 void setupKeys(Keys* keys,
         char s_key, int s_octave, char e_key, int e_octave) {
     extern double A4;
@@ -243,6 +244,8 @@ void setupKeys(Keys* keys,
     keyToTone(black, 25, "A7#", 'b');
 }
 
+/* Helper to put frequency waves into the audio stream
+ */
 int addFrequencies(Sint32 *audio, int alen, Key* keys, int klen) {
     extern WaveForm wave;
     extern SDL_AudioSpec have; // only works if we actually have Sint8
@@ -375,6 +378,20 @@ void AudioCallback(void *userdata, Uint8 *stream, int len){
     SDL_free(audio);
 }
 
+bool isInside(SDL_Rect *rect, SDL_MouseButtonEvent *event) {
+    return event->x >= rect->x && 
+        event->x <= rect->x + rect->w &&
+        event->y >= rect->y &&
+        event->y <= rect->y + rect->h;
+}
+
+bool isInsideMotion(SDL_Rect *rect, SDL_MouseMotionEvent *event) {
+    return event->x >= rect->x && 
+        event->x <= rect->x + rect->w &&
+        event->y >= rect->y &&
+        event->y <= rect->y + rect->h;
+}
+
 int main() {
     extern WaveForm wave;
     // create our keys data structures
@@ -410,6 +427,7 @@ int main() {
         white_keys[i].y = 0;
         white_keys[i].w = 36;
         white_keys[i].h = 220;
+        keys.white[i].rect = &white_keys[i];
     }
     SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff);
     SDL_RenderFillRects(renderer, white_keys, 36);
@@ -426,6 +444,7 @@ int main() {
         if (i % 5 == 1 || i % 5 == 4) {
             dist += 36;
         }
+        keys.black[i].rect = &black_keys[i];
     }
     SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xaa);
     SDL_RenderFillRects(renderer, black_keys, 25);
@@ -433,7 +452,6 @@ int main() {
     SDL_RenderDrawRects(renderer, black_keys, 25);
 
     SDL_RenderPresent(renderer);
-
 
     // setup audio
     SDL_AudioSpec want;
@@ -461,12 +479,71 @@ int main() {
 
     // setup event driven main loop
     SDL_Event event;
+    bool mousedown = false;
+    Key *mousePressed;
     while (SDL_WaitEvent(&event)) {
         int key = 0;
         int mods = 0;
         switch(event.type) {
             case SDL_QUIT:
                 goto done;
+                break;
+            case SDL_MOUSEBUTTONDOWN:
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    mousedown = true;
+                    bool found = false;
+                    for (int i = 0; i < 25; i++) {
+                        if (isInside(keys.black[i].rect, &event.button)) {
+                            mousePressed = &keys.black[i];
+                            keys.black[i].on = true;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break; // don't look at white keys
+                    }
+                    for (int i = 0; i < 36; i++) {
+                        if (isInside(keys.white[i].rect, &event.button)) {
+                            mousePressed = &keys.white[i];
+                            keys.white[i].on = true;
+                            break;
+                        }
+                    }
+                }
+                break;
+            case SDL_MOUSEBUTTONUP:
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    mousedown = false;
+                    mousePressed->on = false;
+                }
+                break;
+            case SDL_MOUSEMOTION:
+                if (mousedown) {
+                    bool found = false;
+                    for (int i = 0; i < 25; i++) {
+                        if (isInsideMotion(keys.black[i].rect, &event.motion) &&
+                                mousePressed != &keys.black[i]) {
+                            mousePressed->on = false;
+                            mousePressed = &keys.black[i];
+                            keys.black[i].on = true;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        break; // don't look at white keys
+                    }
+                    for (int i = 0; i < 36; i++) {
+                        if (isInsideMotion(keys.white[i].rect, &event.motion) &&
+                                mousePressed != &keys.white[i]) {
+                            mousePressed->on = false;
+                            mousePressed = &keys.white[i];
+                            keys.white[i].on = true;
+                            break;
+                        }
+                    }
+                }
                 break;
             case SDL_KEYDOWN:
                 if (event.key.repeat) {
